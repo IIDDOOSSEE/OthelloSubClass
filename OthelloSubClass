@@ -1,0 +1,255 @@
+import 'dart:io';
+import 'dart:math';
+// dart run othello.dart
+
+void main() {
+  print("Welcome to Othello");
+  var game_run = Board();
+  game_run.playGame();
+}
+
+class Board {
+  // set up board
+  late List<List<String>> board;
+  late Processing process;
+  String white = "●";
+  String black = "○";
+  String empty = ".";
+  String marker = "x";
+  int board_size = 8;
+  String current = "●";
+  String another = "○";
+  int black_count = 0;
+  int white_count = 0;
+  Bot bot = Bot();
+
+  Board() {
+    board = List.generate(board_size, (_) => List.filled(board_size, empty));
+    board[3][3] = white;
+    board[3][4] = black;
+    board[4][3] = black;
+    board[4][4] = white;
+    // count score at first
+    process = Processing(board, white, black, empty, marker, board_size, this);
+    process.scoreCount();
+  }
+
+  // print board on screen
+  void initializeboard() {
+    for (var row in board) {
+      print(row.join(" "));
+    }
+  }
+
+  void mark() {
+    for (int row = 0; row < board_size; row++) {
+      for (int col = 0; col < board_size; col++) {
+        if (board[row][col] == empty) {
+          if (process.canPlaceMarker(row, col)) {
+            board[row][col] = marker;
+          }
+        }
+      }
+    }
+  }
+
+  void playGame() {
+    while (true) {
+      mark();
+      initializeboard();
+      print("");
+      print("W : $white_count     B : $black_count");
+      if (process.winCondition()) {
+        if (black_count > white_count) {
+          print("The winner is B");
+        } else if (white_count > black_count) {
+          print("The winner is W");
+        } else {
+          print("Draw");
+        }
+        break;
+      }
+      if (current == white) {
+        stdout.write(
+            "Now is $current's turn. Please enter row and column (e.g., 3 4): ");
+        String? input = stdin.readLineSync();
+
+        if (input != null) {
+          List<String> parts = input.split(' ');
+          if (parts.length == 2) {
+            int? row = int.tryParse(parts[0]);
+            int? col = int.tryParse(parts[1]);
+
+            if (row != null && col != null) {
+              row = row - 1;
+              col = col - 1;
+              if (row >= 0 &&
+                  row < board_size &&
+                  col >= 0 &&
+                  col < board_size &&
+                  board[row][col] == marker) {
+                print('You entered row: ${row + 1}, column: ${col + 1}');
+                board[row][col] = current;
+                process.playing(row, col);
+                process.removeMark();
+              } else {
+                print(
+                    'Row and column must be within the board size (1 to 8) and have a marker.');
+              }
+            } else {
+              print('Invalid input. Please enter numbers for row and column.');
+            }
+          } else {
+            print(
+                'Invalid input. Please enter two numbers separated by a space.');
+          }
+        } else {
+          print('No input received.');
+        }
+      } else if (current == black) {
+        List position = bot.bot_play(board, marker);
+        print(
+            'Bot entered row: ${position[0] + 1}, column: ${position[1] + 1}');
+        board[position[0]][position[1]] = current;
+        process.playing(position[0], position[1]);
+        process.removeMark();
+      }
+    }
+  }
+}
+
+class Processing {
+  late List<List<String>> board;
+  Board game;
+  String white;
+  String black;
+  String empty;
+  String marker;
+  int board_size;
+
+  Processing(this.board, this.white, this.black, this.empty, this.marker,
+      this.board_size, this.game);
+
+  void removeMark() {
+    for (int i = 0; i < 8; i++) {
+      for (int j = 0; j < 8; j++) {
+        if (board[i][j] == marker) {
+          board[i][j] = empty;
+        }
+      }
+    }
+  }
+
+  void scoreCount() {
+    game.black_count = 0;
+    game.white_count = 0;
+    for (int row = 0; row < 8; row++) {
+      for (int col = 0; col < 8; col++) {
+        if (board[row][col] == black) {
+          game.black_count += 1;
+        } else if (board[row][col] == white) {
+          game.white_count += 1;
+        }
+      }
+    }
+  }
+
+  void swapTurn() {
+    game.current = (game.current == white) ? black : white;
+    game.another = (game.another == black) ? white : black;
+  }
+
+  bool winCondition() {
+    for (int i = 0; i < 8; i++) {
+      for (int j = 0; j < 8; j++) {
+        if (board[i][j] == marker) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  bool canPlaceMarker(int row, int col) {
+    return checkDirection(row, col, -1, 0) || // Up
+        checkDirection(row, col, 1, 0) || // Down
+        checkDirection(row, col, 0, -1) || // Left
+        checkDirection(row, col, 0, 1) || // Right
+        checkDirection(row, col, -1, -1) || // Up-left
+        checkDirection(row, col, -1, 1) || // Up-right
+        checkDirection(row, col, 1, -1) || // Down-left
+        checkDirection(row, col, 1, 1); // Down-right
+  }
+
+  bool checkDirection(int row, int col, int rowDir, int colDir) {
+    int r = row + rowDir;
+    int c = col + colDir;
+    bool hasOpponentBetween = false;
+
+    while (r >= 0 && r < board_size && c >= 0 && c < board_size) {
+      if (board[r][c] == empty || board[r][c] == marker) {
+        return false;
+      } else if (board[r][c] == game.another) {
+        hasOpponentBetween = true;
+      } else if (board[r][c] == game.current) {
+        return hasOpponentBetween;
+      }
+      r += rowDir;
+      c += colDir;
+    }
+    // กรณีไม่เข้า while loop เช่น 0 0 -1 -1
+    return false;
+  }
+
+  void playing(int row, int col) {
+    playDirection(row, col, -1, 0); // Up
+    playDirection(row, col, 1, 0); // Down
+    playDirection(row, col, 0, -1); // Left
+    playDirection(row, col, 0, 1); // Right
+    playDirection(row, col, -1, -1); // Up-left
+    playDirection(row, col, -1, 1); // Up-right
+    playDirection(row, col, 1, -1); // Down-left
+    playDirection(row, col, 1, 1); // Down-right
+    swapTurn();
+    scoreCount();
+  }
+
+  void playDirection(int row, int col, int rowDir, int colDir) {
+    List<List<int>> memory = [];
+    int r = row + rowDir;
+    int c = col + colDir;
+
+    while (r >= 0 && r < board_size && c >= 0 && c < board_size) {
+      if (board[r][c] == marker || board[r][c] == empty) {
+        break;
+      } else if (board[r][c] == game.another) {
+        memory.add([r, c]);
+      } else if (board[r][c] == game.current) {
+        for (var pos in memory) {
+          board[pos[0]][pos[1]] = game.current;
+        }
+        break;
+      }
+      r += rowDir;
+      c += colDir;
+    }
+  }
+}
+
+class Bot {
+  var random = Random();
+  List bot_play(board, marker) {
+    int row, col;
+    List botplay = [];
+    // Generates a random integer from 1 to 8
+    while (true) {
+      row = random.nextInt(8);
+      col = random.nextInt(8);
+      if (board[row][col] == marker) {
+        botplay.add(row);
+        botplay.add(col);
+        return botplay;
+      }
+    }
+  }
+}
